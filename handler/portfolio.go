@@ -6,6 +6,7 @@ import (
 	"hexagonal/repository"
 	"hexagonal/service"
 	"net/http"
+	"os"
 	"reflect"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 	"go.mongodb.org/mongo-driver/bson/bsontype"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+var (
+	APP_MOCK = os.Getenv("APP_MOCK") == "1"
 )
 
 type (
@@ -28,29 +33,30 @@ func NewPortfolioHandler(app *echo.Echo) PortfolioHandler {
 	// dbhost := "apicenter_mongo"
 	dbhost := "localhost:27017"
 
-	client, err := connectMongo(dbhost)
+	client, err := initMongo(dbhost)
 	if err != nil {
 		panic(err)
 	}
 
-	portRepoMock := repository.NewPortfolioRepositoryMock()
-	portRepoMongodb := repository.NewPortfolioRepositoryMongodb(client, "crypto")
+	var portRepo repository.PortfolioRepository
 
-	_ = portRepoMock
-	_ = portRepoMongodb
+	if APP_MOCK {
+		portRepo = repository.NewPortfolioRepositoryMock()
+	} else {
+		portRepo = repository.NewPortfolioRepositoryMongodb(client, "portfolio")
+	}
 
-	// fmt.Println("init with MongoDB")
-	portServ := service.NewPortfolioService(portRepoMongodb)
+	portServ := service.NewPortfolioService(portRepo)
 
 	portRepoHandler := PortfolioHandler{portServ: portServ}
 
-	app.GET("/portfolios", portRepoHandler.GetPortfolios)
-	app.GET("/portfolios/:symbol", portRepoHandler.GetPortfolio)
+	app.GET("/portfolios", portRepoHandler.GetPortfolios).Name = "list all portfolio"
+	app.GET("/portfolios/:symbol", portRepoHandler.GetPortfolio).Name = "get portfolio by symbol"
 
 	return portRepoHandler
 }
 
-func connectMongo(dbhost string) (client *mongo.Client, err error) {
+func initMongo(dbhost string) (client *mongo.Client, err error) {
 
 	dbhost = fmt.Sprintf("mongodb://%s", dbhost)
 
